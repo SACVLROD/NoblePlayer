@@ -5,6 +5,13 @@
   <p><b>Version 1.1.1 (Universal Release)</b></p>
 </div>
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/bfb85676-51f4-4013-8837-2842a3b1b682" width="22%" alt="Información Personal" />
+  <img src="https://github.com/user-attachments/assets/559d8162-dfe9-4581-a135-70504d0af7fb" width="22%" alt="Mis Turnos" />
+  <img src="https://github.com/user-attachments/assets/e217d3f3-96cc-4cfc-adc8-ad9cc7583f7e" width="22%" alt="Detalles del Turno" />
+  <img src="https://github.com/user-attachments/assets/d15a9d0c-2fe8-446b-9264-4add5a769858" width="22%" alt="Crear Nuevo Turno" />
+</p>
+
 ---
 
 ## 🇺🇸 English
