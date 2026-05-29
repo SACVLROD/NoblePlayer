@@ -1,3 +1,10 @@
+#[cfg(target_os = "macos")]
+use cocoa::appkit::{NSWindow, NSWindowButton};
+#[cfg(target_os = "macos")]
+use cocoa::base::id;
+#[cfg(target_os = "macos")]
+use objc::{msg_send, sel, sel_impl};
+
 use rodio::{Decoder, OutputStream, Sink};
 use rodio::source::Source;
 use lofty::{prelude::*, probe::Probe, tag::ItemKey};
@@ -524,6 +531,62 @@ pub fn run() {
         .setup(move |app| {
             setup_tray(app).expect("Failed to setup tray");
 
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    // 1. Restore window position from window_pos.json (zero-flash startup)
+                    let local_data_dir = app.path().app_local_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+                    let _ = std::fs::create_dir_all(&local_data_dir);
+                    let pos_file_path = local_data_dir.join("window_pos.json");
+
+                    if let Ok(file) = std::fs::File::open(&pos_file_path) {
+                        if let Ok(pos_data) = serde_json::from_reader::<_, serde_json::Value>(file) {
+                            if let (Some(x), Some(y)) = (pos_data["x"].as_i64(), pos_data["y"].as_i64()) {
+                                let _ = window.set_position(tauri::PhysicalPosition { x: x as i32, y: y as i32 });
+                            }
+                        }
+                    }
+
+                    // 2. Set strict geometry constraints (size = 420x740 strictly locked)
+                    let size = tauri::LogicalSize { width: 420.0, height: 740.0 };
+                    let _ = window.set_size(size);
+                    let _ = window.set_min_size(Some(tauri::Size::Logical(size)));
+                    let _ = window.set_max_size(Some(tauri::Size::Logical(size)));
+
+                    // 3. Programmatically hide the green Zoom button (traffic lights)
+                    unsafe {
+                        if let Ok(ns_window) = window.ns_window() {
+                            let ns_window = ns_window as id;
+                            let zoom_button: id = ns_window.standardWindowButton_(NSWindowButton::NSWindowZoomButton);
+                            if !zoom_button.is_null() {
+                                let _: () = msg_send![zoom_button, setHidden: cocoa::base::YES];
+                            }
+                        }
+                    }
+
+                    // 4. Show window now that it's in the correct position (completely eliminating startup flickering!)
+                    let _ = window.show();
+
+                    // 5. Listen to Moved events in Rust to save the coordinates natively on the fly
+                    let pos_file_path_clone = pos_file_path.clone();
+                    let window_clone = window.clone();
+                    window.on_window_event(move |event| {
+                        if let tauri::WindowEvent::Moved(physical_pos) = event {
+                            let is_full = window_clone.is_fullscreen().unwrap_or(false);
+                            let is_max = window_clone.is_maximized().unwrap_or(false);
+                            if !is_full && !is_max {
+                                let data = serde_json::json!({
+                                    "x": physical_pos.x,
+                                    "y": physical_pos.y
+                                });
+                                if let Ok(file) = std::fs::File::create(&pos_file_path_clone) {
+                                    let _ = serde_json::to_writer(file, &data);
+                                }
+                            }
+                        }
+                    });
+                }
+            }
 
             let app_handle = app.handle().clone();
             

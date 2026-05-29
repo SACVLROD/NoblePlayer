@@ -22,14 +22,17 @@ const translations = {
     tooltipNext: "Siguiente",
     tooltipRepeat: "Repetir",
     tooltipMute: "Silenciar",
-    tooltipMiniPlayer: "Modo Mini-Reproductor",
-    tooltipRestorePlayer: "Restaurar Reproductor",
     tooltipPause: "Pausar",
     repeatOff: "Repetir: Apagado",
     repeatAll: "Repetir: Todo",
     repeatOne: "Repetir: Una canción",
     tooltipSortAZ: "Ordenar A-Z",
-    tooltipSortZA: "Ordenar Z-A"
+    tooltipSortZA: "Ordenar Z-A",
+    tooltipClose: "Cerrar",
+    tooltipAddFiles: "Añadir canciones",
+    tooltipAddFolder: "Añadir carpeta",
+    tooltipRemove: "Eliminar de la lista",
+    tooltipClear: "Limpiar lista"
   },
   EN: {
     titleDefault: "Load your music",
@@ -49,14 +52,17 @@ const translations = {
     tooltipNext: "Next",
     tooltipRepeat: "Repeat",
     tooltipMute: "Mute",
-    tooltipMiniPlayer: "Mini-Player Mode",
-    tooltipRestorePlayer: "Restore Player",
     tooltipPause: "Pause",
     repeatOff: "Repeat: Off",
     repeatAll: "Repeat: All",
     repeatOne: "Repeat: One song",
     tooltipSortAZ: "Sort A-Z",
-    tooltipSortZA: "Sort Z-A"
+    tooltipSortZA: "Sort Z-A",
+    tooltipClose: "Close",
+    tooltipAddFiles: "Add songs",
+    tooltipAddFolder: "Add folder",
+    tooltipRemove: "Remove from list",
+    tooltipClear: "Clear list"
   }
 };
 let currentLang = "ES";
@@ -72,12 +78,7 @@ function setLanguage(lang) {
     const key = el.getAttribute("data-i18n");
     if (dict[key]) {
       if (key.startsWith("tooltip")) {
-        // In mini player mode, make sure the mini toggle button gets the "restore" tooltip
-        if (el.id === "btn-mini-mode" && isMiniMode) {
-          el.title = dict["tooltipRestorePlayer"];
-        } else {
-          el.title = dict[key];
-        }
+        el.title = dict[key];
       } else {
         el.textContent = dict[key];
       }
@@ -151,8 +152,10 @@ let btnThemeEl, iconMoonEl, iconSunEl;
 // ─────────────────────────────────────────────
 // Default Palettes aligned with Concept F Brand
 // ─────────────────────────────────────────────
-const defaultDarkTheme  = { bg1: "rgba(22, 20, 18, 0.85)", bg2: "rgba(15, 14, 13, 0.90)", accent: "#f59e0b", glow: "rgba(245, 158, 11, 0.28)" };
-const defaultLightTheme = { bg1: "rgba(250, 248, 245, 0.88)", bg2: "rgba(240, 234, 221, 0.92)", accent: "#d97706", glow: "rgba(217, 119, 6, 0.18)" };
+const defaultDarkTheme  = { bg1: "#16151a", bg2: "#0b0a0d", accent: "#ffb300", glow: "rgba(255, 179, 0, 0.25)" };
+const defaultLightTheme = { bg1: "#fcfcfd", bg2: "#f3f4f6", accent: "#d97706", glow: "rgba(217, 119, 6, 0.16)" };
+
+
 
 
 // ─────────────────────────────────────────────
@@ -212,44 +215,6 @@ function cacheDOM() {
   iconMoonEl = document.getElementById("icon-moon");
   iconSunEl  = document.getElementById("icon-sun");
 
-}
-
-function updateTrackInfo() {
-  const track = playlist[currentIndex];
-  if (!track) {
-    document.getElementById("song-title").textContent = translations[currentLang].titleDefault;
-    document.getElementById("song-artist").textContent = translations[currentLang].artistDefault;
-    document.getElementById("song-album-year").textContent = "";
-    document.getElementById("art-placeholder").classList.remove("hidden");
-    document.getElementById("album-art").classList.add("hidden");
-    document.getElementById("art-container").style.boxShadow = "none";
-    updateAppBackground(null);
-    return;
-  }
-  const title = track.title || track.name || track.path.split('/').pop() || "Desconocido";
-  const artist = track.artist || "Desconocido";
-  
-  document.getElementById("song-title").textContent = title;
-  document.getElementById("song-artist").textContent = artist;
-  
-  const details = [];
-  if (track.album) details.push(track.album);
-  if (track.year) details.push(track.year);
-  document.getElementById("song-album-year").textContent = details.join(" • ");
-
-  if (track.picture) {
-    document.getElementById("art-placeholder").classList.add("hidden");
-    const artEl = document.getElementById("album-art");
-    artEl.src = `data:${track.picture.mime_type || 'image/jpeg'};base64,${track.picture.data}`;
-    artEl.classList.remove("hidden");
-    document.getElementById("art-container").style.boxShadow = "0 25px 50px -12px rgba(0,0,0,0.5)";
-    updateAppBackground(artEl.src);
-  } else {
-    document.getElementById("art-placeholder").classList.remove("hidden");
-    document.getElementById("album-art").classList.add("hidden");
-    document.getElementById("art-container").style.boxShadow = "none";
-    updateAppBackground(null);
-  }
 }
 // ─────────────────────────────────────────────
 // Event Listeners
@@ -311,38 +276,114 @@ function setupEventListeners() {
     setLanguage(newLang);
   });
 
-  document.getElementById("btn-mini-mode").addEventListener("click", toggleMiniPlayer);
-
-  // ── Auto-restore from mini-player on manual resize or OS window snapping ──
-  window.addEventListener("resize", () => {
-    if (isMiniMode && (window.innerWidth > 280 || window.innerHeight > 280)) {
-      isMiniMode = false;
-      document.body.classList.remove("mini-mode");
+  // ── Intelligent window snapping & restore handling ────────────────────────
+  let resizeTimeout;
+  window.addEventListener("resize", async () => {
+    try {
+      const appWindow = window.__TAURI__.window.getCurrentWindow();
       
+      let isFull = false;
       try {
-        const appWindow = window.__TAURI__.window.getCurrentWindow();
-        appWindow.setAlwaysOnTop(false);
+        isFull = await appWindow.isFullscreen();
       } catch (err) {
-        console.error("Failed to restore Always-On-Top on resize:", err);
+        console.warn("Could not check if window is fullscreen:", err);
       }
       
-      // Update toggle button icon back to normal mode
-      const btnMini = document.getElementById("btn-mini-mode");
-      if (btnMini) {
-        btnMini.title = currentLang === "EN" ? "Mini-Player Mode" : "Modo Mini-Reproductor";
-        btnMini.innerHTML = `
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="9" y1="3" x2="9" y2="21"></line>
-          </svg>
-        `;
+      if (isFull) {
+        // In fullscreen, remove minSize constraints so it can expand to fill the screen
+        try {
+          const minSize = window.__TAURI__?.dpi?.LogicalSize
+            ? new window.__TAURI__.dpi.LogicalSize(100, 100)
+            : { type: 'Logical', data: { width: 100, height: 100 } };
+          await appWindow.setMinSize(minSize);
+        } catch (err) {
+          console.warn("Could not set minimum window size in fullscreen:", err);
+        }
+      } else {
+        // When exiting fullscreen, re-enforce the 420x740 minSize
+        const size = window.__TAURI__?.dpi?.LogicalSize
+          ? new window.__TAURI__.dpi.LogicalSize(420, 740)
+          : { type: 'Logical', data: { width: 420, height: 740 } };
+        
+        try {
+          await appWindow.setMinSize(size);
+        } catch (err) {
+          console.warn("Could not set minimum window size in windowed mode:", err);
+        }
+        
+        // Defer size check to wait for native window manager animations/tiling transitions to finish
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(async () => {
+          try {
+            let isFullNow = false;
+            try {
+              isFullNow = await appWindow.isFullscreen();
+            } catch (err) {
+              console.warn("Could not check isFullscreen inside deferred callback:", err);
+            }
+            if (isFullNow) return;
+
+            let scaleFactor = 1.0;
+            try {
+              scaleFactor = await appWindow.scaleFactor() || 1.0;
+            } catch (err) {
+              console.warn("Could not check scaleFactor:", err);
+            }
+
+            let physicalSize = { width: 0, height: 0 };
+            try {
+              physicalSize = await appWindow.innerSize();
+            } catch (err) {
+              console.warn("Could not check innerSize:", err);
+            }
+
+            const logicalWidth = Math.round(physicalSize.width / scaleFactor);
+            const logicalHeight = Math.round(physicalSize.height / scaleFactor);
+            
+            if (logicalWidth !== 420 || logicalHeight !== 740) {
+              let isMax = false;
+              try {
+                isMax = await appWindow.isMaximized();
+              } catch (err) {
+                console.warn("Could not check if window is maximized:", err);
+              }
+
+              if (isMax) {
+                try {
+                  await appWindow.unmaximize();
+                } catch (err) {
+                  console.warn("Could not unmaximize window:", err);
+                }
+              }
+
+              try {
+                await appWindow.setSize(size);
+              } catch (err) {
+                console.warn("Could not set window size back to 420x740:", err);
+              }
+            }
+          } catch (err) {
+            console.warn("Deferred resize snapping failed:", err);
+          }
+        }, 150);
       }
+    } catch (err) {
+      console.warn("Resize handling error:", err);
     }
+
+    // Always re-render the virtual queue list whenever the window size changes so the scroll bounds adapt.
+    renderQueue();
   });
 
-  // ── Playlist panel toggle ─────────────────────
+  // ── Playlist panel toggle ─────────────────────────────
   document.getElementById("toggle-playlist").addEventListener("click", () => {
-    playlistPanelEl.classList.toggle("open");
+    const isOpen = playlistPanelEl.classList.contains("open");
+    if (!isOpen) {
+      playlistPanelEl.classList.add("open");
+      renderQueue();
+    } else {
+      playlistPanelEl.classList.remove("open");
+    }
   });
 
   document.getElementById("close-playlist").addEventListener("click", () => {
@@ -366,6 +407,11 @@ function setupEventListeners() {
   // ── Search & Sort ─────────────────────────────
   playlistSearchEl.addEventListener("input", renderQueue);
   document.getElementById("btn-sort-playlist").addEventListener("click", toggleSortPlaylist);
+
+  const playlistItemsWrapper = document.querySelector(".playlist-items-wrapper");
+  if (playlistItemsWrapper) {
+    playlistItemsWrapper.addEventListener("scroll", updateVirtualList);
+  }
 
   // ── Playback Controls ─────────────────────────
   btnPlayPauseEl.addEventListener("click", togglePlayPause);
@@ -507,13 +553,12 @@ function setupEventListeners() {
 
       const isClickInDragBar = e.target.closest(".drag-bar");
       
-      // In mini mode, the entire player container is draggable (except on controls).
-      // In normal mode, only dragging starting in the header drag-bar is allowed.
-      if (isMiniMode || isClickInDragBar) {
+      // Only dragging starting in the header drag-bar is allowed.
+      if (isClickInDragBar) {
         if (e.buttons === 1) {
           try {
             const appWindow = window.__TAURI__.window.getCurrentWindow();
-            if (e.detail === 2 && !isMiniMode) {
+            if (e.detail === 2) {
               appWindow.toggleMaximize();
             } else {
               appWindow.startDragging();
@@ -555,16 +600,14 @@ function toggleTheme() {
     iconSunEl.classList.remove("hidden");
     btnThemeEl.classList.add("theme-active");
   }
-
-  // Re-apply correct default background gradient
   let theme = defaultDarkTheme;
   if (themeMode === "light") {
     theme = defaultLightTheme;
   }
   applyTheme(theme.bg1, theme.bg2, theme.accent, theme.glow);
-
-  // Colors are fixed to the chosen theme, no dynamic extraction.
 }
+
+
 
 // ─────────────────────────────────────────────
 // Tauri Event Listeners
@@ -943,7 +986,7 @@ function createQueueItem(track, originalIndex, visualIndex) {
     </div>
     <div class="queue-item-right">
       <span class="queue-duration">${formatTime(track.duration)}</span>
-      <button class="btn-remove-track" title="Eliminar de la lista">
+      <button class="btn-remove-track" title="${translations[currentLang].tooltipRemove}">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="3 6 5 6 21 6"></polyline>
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -1118,17 +1161,18 @@ function updateMetadataUI(track) {
     albumArtEl.src = track.cover_art;
     albumArtEl.classList.remove("hidden");
     artPlaceholderEl.classList.add("hidden");
-    // Removed extractCoverArtColors as requested (fixed colors)
   } else {
     albumArtEl.src = "placeholder.png";
     albumArtEl.classList.remove("hidden");
     artPlaceholderEl.classList.add("hidden");
-    let theme = defaultDarkTheme;
-    if (themeMode === "light") {
-      theme = defaultLightTheme;
-    }
-    applyTheme(theme.bg1, theme.bg2, theme.accent, theme.glow);
   }
+
+  // Always keep fixed app colors aligned with dark/light mode
+  let theme = defaultDarkTheme;
+  if (themeMode === "light") {
+    theme = defaultLightTheme;
+  }
+  applyTheme(theme.bg1, theme.bg2, theme.accent, theme.glow);
 
   checkTitleMarquee();
 }
@@ -1194,33 +1238,17 @@ function escapeHTML(str) {
     .replace(/'/g, "&#039;");
 }
 
-// Dynamic cover art color extraction removed as requested. Colors are now fixed.
 
 function applyTheme(bg1, bg2, accent, glow) {
   const root = document.documentElement.style;
   root.setProperty("--bg-color-1",   bg1);
   root.setProperty("--bg-color-2",   bg2);
+  root.setProperty("--drawer-bg",    bg2);
   root.setProperty("--accent-color", accent);
   root.setProperty("--accent-glow",  glow);
 }
 
-function rgbToHsl(r, g, b) {
-  r/=255; g/=255; b/=255;
-  const max=Math.max(r,g,b), min=Math.min(r,g,b);
-  let h, s, l=(max+min)/2;
-  if (max===min) { h=s=0; }
-  else {
-    const d=max-min;
-    s = l>0.5 ? d/(2-max-min) : d/(max+min);
-    switch(max) {
-      case r: h=(g-b)/d+(g<b?6:0); break;
-      case g: h=(b-r)/d+2; break;
-      case b: h=(r-g)/d+4; break;
-    }
-    h/=6;
-  }
-  return [Math.round(h*360), Math.round(s*100), Math.round(l*100)];
-}
+
 
 // ─────────────────────────────────────────────
 // Audio Wave Visualizer (real-time RMS bars)
@@ -1287,59 +1315,6 @@ function startVisualizerLoop() {
   visualizerAnimationId = requestAnimationFrame(renderFrame);
 }
 
-// ─────────────────────────────────────────────
-// Mini-Player Mode Toggle
-// ─────────────────────────────────────────────
-let isMiniMode = false;
-
-async function toggleMiniPlayer() {
-  const nextMiniMode = !isMiniMode;
-  
-  try {
-    const appWindow = window.__TAURI__.window.getCurrentWindow();
-    
-    // In Tauri v2, setSize expects a size structure of:
-    // { type: 'Logical', data: { width: X, height: Y } }
-    // We try to use the constructor from window.__TAURI__.dpi if available, otherwise fallback to the raw object.
-    const size = window.__TAURI__?.dpi?.LogicalSize
-      ? new window.__TAURI__.dpi.LogicalSize(nextMiniMode ? 240 : 420, nextMiniMode ? 240 : 740)
-      : { type: 'Logical', data: { width: nextMiniMode ? 240 : 420, height: nextMiniMode ? 240 : 740 } };
-      
-    await appWindow.setSize(size);
-    await appWindow.setAlwaysOnTop(nextMiniMode);
-    
-    // Apply visual classes and update state ONLY if the OS window operation successfully executed!
-    isMiniMode = nextMiniMode;
-    document.body.classList.toggle("mini-mode", isMiniMode);
-    
-    // Update button visual state & tooltips dynamically for ultra-premium UX
-    const btnMini = document.getElementById("btn-mini-mode");
-    if (btnMini) {
-      if (isMiniMode) {
-        btnMini.title = currentLang === "EN" ? "Restore Player" : "Restaurar Reproductor";
-        btnMini.innerHTML = `
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <polyline points="9 21 3 21 3 15"></polyline>
-            <line x1="21" y1="3" x2="14" y2="10"></line>
-            <line x1="3" y1="21" x2="10" y2="14"></line>
-          </svg>
-        `;
-      } else {
-        btnMini.title = currentLang === "EN" ? "Mini-Player Mode" : "Modo Mini-Reproductor";
-        btnMini.innerHTML = `
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="9" y1="3" x2="9" y2="21"></line>
-          </svg>
-        `;
-      }
-    }
-  } catch (err) {
-    console.error("Failed to toggle Mini Player size:", err);
-  }
-}
-
 async function setupGlobalShortcuts() {
   try {
     const gs = window.__TAURI__.globalShortcut;
@@ -1355,3 +1330,4 @@ async function setupGlobalShortcuts() {
     console.warn("Could not clean up global hotkeys:", err);
   }
 }
+

@@ -25,4 +25,4 @@ dist-ssr
 
 # Compiled installers
 *.dmg
-
+*.app
