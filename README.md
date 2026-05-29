@@ -5,6 +5,13 @@
   <p><b>v1.1.5</b></p>
 </div>
 
+<div style="display: flex; gap: 10px; align-items: center;">
+  <img src="https://github.com/user-attachments/assets/d6d7ab5f-c91d-4366-921b-e4109d95ef8d" alt="Captura 1" width="24%" />
+  <img src="https://github.com/user-attachments/assets/1e4eddec-96e3-4b94-9a85-9481f8bc444f" alt="Captura 2" width="24%" />
+  <img src="https://github.com/user-attachments/assets/2d2a457c-111b-4933-9d66-94c9639e3e87" alt="Captura 3" width="24%" />
+  <img src="https://github.com/user-attachments/assets/c4f8dee8-dcf0-430a-80f0-a32a5396851f" alt="Captura 4" width="24%" />
+</div>
+
 ---
 
 ## 🎨 Vibecoding
